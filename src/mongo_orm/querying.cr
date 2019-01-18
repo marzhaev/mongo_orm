@@ -14,18 +14,7 @@ module Mongo::ORM::Querying
         model = \{{@type.name.id}}.new
         model._id = bson["_id"].as(BSON::ObjectId) if bson["_id"]?
         fields = {} of String => Bool
-        \{% for name, type in SPECIAL_FIELDS %}
-          fields["\{{name.id}}"] = true
-          model.\{{name.id}} = [] of \{{hash[:type_].id}}
-          if bson.has_key?("\{{name}}")
-            bson["\{{name}}"].not_nil!.as(BSON).each do |item|
-              loaded = \{{hash[:type_].id}}.from_bson(item.value)
-              model.\{{name.id}} << loaded unless loaded.nil?
-            end
-          else
-            raise "missing bson key: \{{name}}"
-          end
-        \{% end %}
+
         \{% for name, hash in FIELDS %}
           fields["\{{name.id}}"] = true
           model.\{{name.id}} = if \{{hash[:type_].id}}.is_a? Mongo::ORM::EmbeddedDocument.class
@@ -34,11 +23,29 @@ module Mongo::ORM::Querying
             bson["\{{name}}"].as(Union(\{{hash[:type_].id}} | Nil))
           elsif !bson.has_key?("\{{name}}") && \{{ hash }}.has_key?(:default)
             \{{hash[:default]}}
+          else
+            raise "missing bson key: \{{name}}"
           end
           \{% if hash[:type_].id == Time %}
             model.\{{name.id}} = model.\{{name.id}}.not_nil!.to_utc if model.\{{name.id}}
           \{% end %}
         \{% end %}
+
+        \{% for name, hash in SPECIAL_FIELDS %}
+          fields["\{{name.id}}"] = true
+          model.\{{name.id}} = [] of \{{hash[:type_].id}}
+          if bson.has_key?("\{{name}}")
+            bson["\{{name}}"].not_nil!.as(BSON).each do |item|
+              loaded = \{{hash[:type_].id}}.from_bson(item.value)
+              model.\{{name.id}} << loaded unless loaded.nil?
+            end
+          elsif !bson.has_key?("\{{name}}") && \{{ hash }}.has_key?(:default)
+            \{{hash[:default]}}
+          else
+            raise "missing bson key: \{{name}}"
+          end
+        \{% end %}
+
         \{% if SETTINGS[:timestamps] %}
           model.created_at = bson["created_at"].as(Union(Time | Nil)) if bson["created_at"]?
           model.updated_at = bson["updated_at"].as(Union(Time | Nil)) if bson["updated_at"]?
